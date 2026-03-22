@@ -1,0 +1,5 @@
+{
+  "name": "CMoney Data Viewer",
+  "description": "A web application that fetches and displays financial data from CMoney API, specifically for ETF 0050.",
+  "requestFramePermissions": []
+}

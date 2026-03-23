@@ -65,6 +65,7 @@ export default function App() {
 
   // Filter state
   const [filterText, setFilterText] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ key: number | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
   const [isExportingSheet, setIsExportingSheet] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -131,11 +132,13 @@ export default function App() {
   };
 
   const [showGasGuide, setShowGasGuide] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
-  const handleExportToGoogleSheet = async () => {
+  const handleExportToGoogleSheet = async (mode: 'new' | 'replace' = 'new') => {
     if (!data) return;
     
     setIsExportingSheet(true);
+    setShowExportModal(false);
     
     try {
       // Perform export via GAS (Server-side proxy)
@@ -144,8 +147,9 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: `${etfLabel} 持股資料 - ${new Date().toLocaleDateString()}`,
-          data: data
+          title: `${etfLabel} 持股資料`,
+          data: data,
+          mode: mode
         })
       });
 
@@ -255,11 +259,48 @@ export default function App() {
     }
   };
 
+  const handleSort = (index: number) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === index && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key: index, direction });
+  };
+
+  const getSortedData = (rows: any[][]) => {
+    if (sortConfig.key === null) return rows;
+
+    return [...rows].sort((a, b) => {
+      const aValue = a[sortConfig.key!];
+      const bValue = b[sortConfig.key!];
+
+      // Try numeric sort first
+      const aNum = parseFloat(String(aValue).replace(/[%,]/g, ''));
+      const bNum = parseFloat(String(bValue).replace(/[%,]/g, ''));
+
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+
+      // Fallback to string sort
+      const aStr = String(aValue);
+      const bStr = String(bValue);
+      return sortConfig.direction === 'asc' 
+        ? aStr.localeCompare(bStr, 'zh-Hant') 
+        : bStr.localeCompare(aStr, 'zh-Hant');
+    });
+  };
+
   const filteredData = data ? {
     ...data,
-    Data: data.Data.filter(row => 
+    Data: getSortedData(data.Data.filter(row => 
       row.some(cell => String(cell).toLowerCase().includes(filterText.toLowerCase()))
-    )
+    ))
+  } : null;
+
+  const sortedRawData = data ? {
+    ...data,
+    Data: getSortedData(data.Data)
   } : null;
 
   return (
@@ -328,7 +369,7 @@ export default function App() {
               </div>
               
               <button
-                onClick={handleExportToGoogleSheet}
+                onClick={() => setShowExportModal(true)}
                 disabled={loading || isExportingSheet || !data}
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-md active:scale-95 disabled:opacity-50"
                 title="匯出至 Google Sheet"
@@ -513,6 +554,19 @@ export default function App() {
                         {etfs.find(e => e.name === selectedEtf)?.label} 
                         <span className="ml-2 text-sm font-normal text-slate-400">({data.Data.length} 條記錄)</span>
                       </h2>
+                      <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                        <TrendingUp size={12} className="text-emerald-600" />
+                        <span className="font-medium">資料來源:</span>
+                        <a 
+                          href={`https://www.cmoney.tw/api/cm/MobileService/ashx/GetDtnoData.ashx?action=getdtnodata&DtNo=59449513&ParamStr=AssignID%3D${selectedEtf}%3BMTPeriod%3D0%3BDTMode%3D0%3BDTRange%3D1%3BDTOrder%3D1%3BMajorTable%3DM722%3B&FilterNo=0`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:text-emerald-600 underline truncate max-w-[200px] md:max-w-md"
+                          title="點擊查看原始 API 資料"
+                        >
+                          CMoney API ({selectedEtf})
+                        </a>
+                      </div>
                     </div>
 
                     {viewMode === 'table' ? (
@@ -522,20 +576,45 @@ export default function App() {
                             <thead>
                               <tr className="bg-slate-50 border-bottom border-slate-200">
                                 {data.Title.map((header, idx) => (
-                                  <th key={idx} className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    {header}
+                                  <th 
+                                    key={idx} 
+                                    onClick={() => handleSort(idx)}
+                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group"
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      {header}
+                                      <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <ChevronDown size={10} className={`-mb-1 ${sortConfig.key === idx && sortConfig.direction === 'asc' ? 'text-emerald-600 rotate-180' : 'text-slate-300'}`} />
+                                        <ChevronDown size={10} className={`${sortConfig.key === idx && sortConfig.direction === 'desc' ? 'text-emerald-600' : 'text-slate-300'}`} />
+                                      </div>
+                                    </div>
                                   </th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {data.Data.map((row, rowIdx) => (
+                              {sortedRawData?.Data.map((row, rowIdx) => (
                                 <tr key={rowIdx} className="hover:bg-slate-50 transition-colors">
-                                  {row.map((cell, cellIdx) => (
-                                    <td key={cellIdx} className="px-6 py-4 text-sm text-slate-700 whitespace-nowrap">
-                                      {cell}
-                                    </td>
-                                  ))}
+                                  {row.map((cell, cellIdx) => {
+                                    const isStockCode = data.Title[cellIdx].includes('代號') || data.Title[cellIdx].includes('代碼');
+                                    return (
+                                      <td key={cellIdx} className="px-6 py-4 text-sm text-slate-700 whitespace-nowrap">
+                                        {isStockCode ? (
+                                          <a 
+                                            href={`https://goodinfo.com.tw/tw/StockDetail.asp?STOCK_ID=${cell}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-emerald-600 hover:text-emerald-700 font-medium underline decoration-emerald-500/30 hover:decoration-emerald-500 transition-all"
+                                            title="開啟 Goodinfo 詳情"
+                                          >
+                                            {cell}
+                                          </a>
+                                        ) : (
+                                          cell
+                                        )}
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               ))}
                             </tbody>
@@ -622,8 +701,18 @@ export default function App() {
                         <thead>
                           <tr className="bg-slate-50 border-bottom border-slate-200">
                             {data.Title.map((header, idx) => (
-                              <th key={idx} className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                {header}
+                              <th 
+                                key={idx} 
+                                onClick={() => handleSort(idx)}
+                                className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group"
+                              >
+                                <div className="flex items-center gap-1">
+                                  {header}
+                                  <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <ChevronDown size={10} className={`-mb-1 ${sortConfig.key === idx && sortConfig.direction === 'asc' ? 'text-emerald-600 rotate-180' : 'text-slate-300'}`} />
+                                    <ChevronDown size={10} className={`${sortConfig.key === idx && sortConfig.direction === 'desc' ? 'text-emerald-600' : 'text-slate-300'}`} />
+                                  </div>
+                                </div>
                               </th>
                             ))}
                           </tr>
@@ -631,11 +720,26 @@ export default function App() {
                         <tbody className="divide-y divide-slate-100">
                           {filteredData.Data.map((row, rowIdx) => (
                             <tr key={rowIdx} className="hover:bg-slate-50 transition-colors">
-                              {row.map((cell, cellIdx) => (
-                                <td key={cellIdx} className="px-6 py-3 text-sm text-slate-700 whitespace-nowrap">
-                                  {cell}
-                                </td>
-                              ))}
+                              {row.map((cell, cellIdx) => {
+                                const isStockCode = data.Title[cellIdx].includes('代號') || data.Title[cellIdx].includes('代碼');
+                                return (
+                                  <td key={cellIdx} className="px-6 py-3 text-sm text-slate-700 whitespace-nowrap">
+                                    {isStockCode ? (
+                                      <a 
+                                        href={`https://goodinfo.com.tw/tw/StockDetail.asp?STOCK_ID=${cell}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-emerald-600 hover:text-emerald-700 font-medium underline decoration-emerald-500/30 hover:decoration-emerald-500 transition-all"
+                                        title="開啟 Goodinfo 詳情"
+                                      >
+                                        {cell}
+                                      </a>
+                                    ) : (
+                                      cell
+                                    )}
+                                  </td>
+                                );
+                              })}
                             </tr>
                           ))}
                         </tbody>
@@ -708,8 +812,24 @@ export default function App() {
     var payload = JSON.parse(e.postData.contents);
     var title = payload.title;
     var data = payload.data;
-    var ss = SpreadsheetApp.create(title);
+    var mode = payload.mode || 'new'; // 'new' or 'replace'
+    
+    var ss;
+    if (mode === 'replace') {
+      var files = DriveApp.getFilesByName(title);
+      if (files.hasNext()) {
+        var file = files.next();
+        ss = SpreadsheetApp.openById(file.getId());
+      } else {
+        ss = SpreadsheetApp.create(title);
+      }
+    } else {
+      ss = SpreadsheetApp.create(title);
+    }
+    
     var sheet = ss.getSheets()[0];
+    sheet.clear(); // 清除現有資料
+    
     if (data.Title) sheet.appendRow(data.Title);
     if (data.Data && data.Data.length > 0) {
       sheet.getRange(2, 1, data.Data.length, data.Data[0].length).setValues(data.Data);
@@ -756,6 +876,69 @@ export default function App() {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-bold transition-all"
                 >
                   我已完成設定
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Export Selection Modal */}
+      <AnimatePresence>
+        {showExportModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <FileSpreadsheet className="text-green-600" />
+                  匯出至 Google Sheet
+                </h3>
+                <button onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <p className="text-slate-600 text-sm">
+                  請選擇匯出方式。若選擇「取代現有檔案」，系統將搜尋名稱為「{etfs.find(e => e.name === selectedEtf)?.label} 持股資料」的檔案並更新內容。
+                </p>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  <button
+                    onClick={() => handleExportToGoogleSheet('new')}
+                    className="flex items-center justify-between p-4 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 rounded-xl transition-all group"
+                  >
+                    <div className="text-left">
+                      <div className="font-bold text-slate-800 group-hover:text-emerald-700">匯出至新檔案</div>
+                      <div className="text-xs text-slate-500">每次匯出都會建立一個新的試算表</div>
+                    </div>
+                    <Plus className="text-slate-400 group-hover:text-emerald-600" />
+                  </button>
+                  
+                  <button
+                    onClick={() => handleExportToGoogleSheet('replace')}
+                    className="flex items-center justify-between p-4 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 rounded-xl transition-all group"
+                  >
+                    <div className="text-left">
+                      <div className="font-bold text-slate-800 group-hover:text-emerald-700">取代現有檔案</div>
+                      <div className="text-xs text-slate-500">更新同名檔案內容，若無則建立新檔</div>
+                    </div>
+                    <RefreshCw className="text-slate-400 group-hover:text-emerald-600" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-slate-500 hover:text-slate-700 px-4 py-2 font-medium"
+                >
+                  取消
                 </button>
               </div>
             </motion.div>

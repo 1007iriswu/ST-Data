@@ -32,7 +32,26 @@
 > - 錯誤提示應為即時顯示，且在使用者重新輸入時自動消失。
 > - 確保編輯模式下，修改後的代號不會與其他現有代號衝突。
 
-## 4. 文件化階段 (Documentation)
+## 4. Google Sheets 匯出階段 (Google Sheets Export)
+
+**Prompt:**
+> 增加「匯出至 Google Sheet」功能。
+> - 使用 Google Apps Script (GAS) 作為中繼站。
+> - 當使用者點擊「Sheet」按鈕時，若未設定 `GAS_WEB_APP_URL` 環境變數，應彈出詳細的設定指南（包含 GAS 程式碼與部署步驟）。
+> - 支援兩種匯出模式：
+>   - **匯出至新檔案**：每次建立新的試算表。
+>   - **取代現有檔案**：搜尋雲端硬碟中同名檔案並更新內容，若無則建立新檔。
+> - 匯出完成後自動開啟產生的試算表網址。
+
+## 5. 數據互動與連結優化 (Data Interaction & Links)
+
+**Prompt:**
+> 優化數據呈現與互動功能：
+> - 在資料標題旁顯示原始 API 資料來源網址。
+> - 實作表格標題排序功能：點擊標題可進行正序/倒序排列，需支援數字（含百分比、逗號）與文字排序。
+> - 自動偵測「代號」或「代碼」欄位，將其轉換為連結，點擊後在新分頁開啟 Goodinfo! (`https://goodinfo.com.tw/tw/StockDetail.asp?STOCK_ID={ID}`)。
+
+## 6. 文件化階段 (Documentation)
 
 **Prompt:**
 > 1. 用中文撰寫專案說明並寫入 `Readme.md`。

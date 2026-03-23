@@ -107,7 +107,7 @@ async function startServer() {
   });
 
   app.post("/api/export/google-sheet", async (req, res) => {
-    const { title, data } = req.body;
+    const { title, data, mode } = req.body;
     const gasUrl = process.env.GAS_WEB_APP_URL;
 
     if (!gasUrl) {
@@ -122,7 +122,7 @@ async function startServer() {
       const response = await fetch(gasUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, data })
+        body: JSON.stringify({ title, data, mode })
       });
 
       if (!response.ok) {
